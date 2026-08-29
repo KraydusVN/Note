@@ -45,20 +45,29 @@ local function setupAutoRejoin()
         end
     end)
 end
--- Cách 1 (khuyên dùng - áp dụng mọi lần mở game/inject lại):
---   Hầu hết executor (Synapse X, Script-Ware, Fluxus, Codex, Wave...) đều có
---   sẵn thư mục/mục "Auto Execute" trong giao diện của chính executor.
---   Bạn chỉ cần lưu file NameHub.lua này vào đúng thư mục đó MỘT LẦN DUY NHẤT
---   (thường là "autoexec" trong workspace của executor) — không cần code gì thêm,
---   mọi lần vào game sau executor sẽ tự chạy script này.
---
--- Cách 2 (tự động qua code - áp dụng khi teleport sang map/server khác
---   trong CÙNG một phiên chơi, không cần tắt/mở lại executor):
+-- ==== TỰ ĐỘNG EXECUTE KHI ĐỔI SERVER ====
+-- LƯU Ý QUAN TRỌNG: điền đúng link RAW GitHub của bạn vào đây
+-- (ví dụ: https://raw.githubusercontent.com/ten-user/NameHub/main/NameHub.lua)
+-- Nếu để trống, tính năng tự chạy lại khi đổi server sẽ KHÔNG hoạt động.
+local NAMEHUB_RAW_URL = "DÁN_LINK_RAW_GITHUB_CỦA_BẠN_VÀO_ĐÂY"
+
 local function setupAutoExecute()
+    if NAMEHUB_RAW_URL == "" or NAMEHUB_RAW_URL == "DÁN_LINK_RAW_GITHUB_CỦA_BẠN_VÀO_ĐÂY" then
+        return
+    end
+
+    -- Dùng HttpGet để lấy lại đúng nội dung script từ GitHub mỗi lần đổi server,
+    -- KHÔNG phụ thuộc vào file cục bộ (vì file đó không tự tồn tại trước đó,
+    -- đây chính là lý do trước kia script không hiện lại sau khi đổi server).
+    local loaderCode = string.format(
+        'loadstring(game:HttpGet(%q))()',
+        NAMEHUB_RAW_URL
+    )
+
     if syn and syn.queue_on_teleport then
-        pcall(syn.queue_on_teleport, [[loadstring(readfile("NameHub/NameHub.lua"))()]])
+        pcall(syn.queue_on_teleport, loaderCode)
     elseif queue_on_teleport then
-        pcall(queue_on_teleport, [[loadstring(readfile("NameHub/NameHub.lua"))()]])
+        pcall(queue_on_teleport, loaderCode)
     end
 end
 
@@ -163,6 +172,9 @@ end)
 
 -- Kích hoạt tự động execute khi teleport sang map/server khác (nếu executor hỗ trợ)
 setupAutoExecute()
+
+-- Kích hoạt tự động rejoin nếu bị kick / rớt mạng / server sập
+setupAutoRejoin()
 
 -- Kích hoạt tự động rejoin nếu bị kick / rớt mạng / server sập
 setupAutoRejoin()
