@@ -1,75 +1,48 @@
-local player = game:GetService("Players").LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 
--- Thư mục lưu trữ trên workspace của executor
-local SAVE_FOLDER = "NameHub"
-local SAVE_FILE = SAVE_FOLDER .. "/job_" .. player.UserId .. ".txt"
+local lp = Players.LocalPlayer
+local playerGui = lp:WaitForChild("PlayerGui")
+local DATA_DIR = "tzuancaythue/"
 
--- Kiểm tra các hàm filesystem của executor (writefile/readfile/isfile/makefolder)
-local hasFS = writefile and readfile and isfile and makefolder and isfolder
-
-if hasFS then
-    if not isfolder(SAVE_FOLDER) then
-        makefolder(SAVE_FOLDER)
+local function ensureDir()
+    if not isfolder(DATA_DIR) then
+        makefolder(DATA_DIR)
     end
 end
 
--- ==== TỰ ĐỘNG REJOIN KHI BỊ KICK / RỚT MẠNG ====
--- game:BindToClose chạy khi client sắp đóng kết nối tới server hiện tại
--- (bao gồm cả trường hợp bị kick, server sập, hoặc rớt mạng).
--- Khi đó script sẽ tự teleport lại đúng place (và đúng server nếu có JobId).
-local TeleportService = game:GetService("TeleportService")
-local RunService = game:GetService("RunService")
+local function saveUser(name, data)
+    ensureDir()
+    local path = DATA_DIR .. name .. ".json"
+    writefile(path, HttpService:JSONEncode(data))
+end
 
-local function setupAutoRejoin()
-    if RunService:IsStudio() then return end -- không rejoin khi test trong Studio
+local function loadUser(name)
+    ensureDir()
+    local path = DATA_DIR .. name .. ".json"
+    if isfile(path) then
+        local ok, d = pcall(HttpService.JSONDecode, HttpService, readfile(path))
+        if ok then return d end
+    end
+    return nil
+end
 
-    game:BindToClose(function()
-        local placeId = game.PlaceId
-        local jobId = game.JobId -- rỗng nếu server đã sập hẳn
-
-        local ok = pcall(function()
-            if jobId ~= "" then
-                -- Cố gắng vào lại ĐÚNG server cũ
-                TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
-            else
-                -- Nếu không lấy được server cũ, vào server bất kỳ của cùng place
-                TeleportService:Teleport(placeId, player)
+local function loadAll()
+    ensureDir()
+    local out = {}
+    for _, fname in ipairs(listfiles(DATA_DIR)) do
+        if fname:sub(-5) == ".json" then
+            local ok, d = pcall(HttpService.JSONDecode, HttpService, readfile(fname))
+            if ok then
+                local name = fname:match("([^/\\]+)%.json$")
+                if name then d.username = name table.insert(out, d) end
             end
-        end)
-
-        if not ok then
-            pcall(function()
-                TeleportService:Teleport(placeId, player)
-            end)
         end
-    end)
-end
--- ==== TỰ ĐỘNG EXECUTE KHI ĐỔI SERVER ====
--- LƯU Ý QUAN TRỌNG: điền đúng link RAW GitHub của bạn vào đây
--- (ví dụ: https://raw.githubusercontent.com/ten-user/NameHub/main/NameHub.lua)
--- Nếu để trống, tính năng tự chạy lại khi đổi server sẽ KHÔNG hoạt động.
-local NAMEHUB_RAW_URL = "DÁN_LINK_RAW_GITHUB_CỦA_BẠN_VÀO_ĐÂY"
-
-local function setupAutoExecute()
-    if NAMEHUB_RAW_URL == "" or NAMEHUB_RAW_URL == "DÁN_LINK_RAW_GITHUB_CỦA_BẠN_VÀO_ĐÂY" then
-        return
     end
-
-    -- Dùng HttpGet để lấy lại đúng nội dung script từ GitHub mỗi lần đổi server,
-    -- KHÔNG phụ thuộc vào file cục bộ (vì file đó không tự tồn tại trước đó,
-    -- đây chính là lý do trước kia script không hiện lại sau khi đổi server).
-    local loaderCode = string.format(
-        'loadstring(game:HttpGet(%q))()',
-        NAMEHUB_RAW_URL
-    )
-
-    if syn and syn.queue_on_teleport then
-        pcall(syn.queue_on_teleport, loaderCode)
-    elseif queue_on_teleport then
-        pcall(queue_on_teleport, loaderCode)
-    end
+    return out
 end
+
+local uData = loadUser(lp.Name) or { username = lp.Name, orders = "", status = "working", savedAt = os.time() }
 
 -- Ẩn một phần tên
 local function hideName(name)
@@ -78,44 +51,22 @@ local function hideName(name)
     return string.sub(name, 1, visibleLength) .. hiddenPart
 end
 
--- Lưu nội dung đơn vào workspace
-local function saveJob(text)
-    if hasFS then
-        local ok, err = pcall(function()
-            writefile(SAVE_FILE, text)
-        end)
-        if not ok then
-            warn("NameHub: không thể lưu file - " .. tostring(err))
-        end
-    end
-end
-
--- Đọc nội dung đơn đã lưu (nếu có)
-local function loadJob()
-    if hasFS and isfile(SAVE_FILE) then
-        local ok, content = pcall(readfile, SAVE_FILE)
-        if ok then
-            return content
-        end
-    end
-    return ""
-end
-
 -- Tạo GUI chính
 local nameHub = Instance.new("ScreenGui")
-nameHub.Name = "NameHub"
+nameHub.Name = "TzuanCayThue"
+nameHub.ResetOnSpawn = false
 nameHub.Parent = playerGui
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Parent = nameHub
-mainFrame.Size = UDim2.new(0.6, 0, 0.2, 0) -- Khung kéo dài ra
-mainFrame.Position = UDim2.new(0.5, 0, 0.12, 0)
+mainFrame.Size = UDim2.new(0.45, 0, 0.2, 0)
+mainFrame.Position = UDim2.new(0.5, 0, 0.1, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BackgroundTransparency = 0.2
 mainFrame.BorderSizePixel = 0
 mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-mainFrame.Active = true -- Cho phép kéo
-mainFrame.Draggable = true -- Kéo thả được
+mainFrame.Active = true
+mainFrame.Draggable = true
 
 local uiCorner = Instance.new("UICorner")
 uiCorner.CornerRadius = UDim.new(0.15, 0)
@@ -124,19 +75,19 @@ uiCorner.Parent = mainFrame
 -- Hiển thị tên (ẩn bớt chữ)
 local nameLabel = Instance.new("TextLabel")
 nameLabel.Parent = mainFrame
-nameLabel.Size = UDim2.new(1, 0, 0.4, 0)
+nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
 nameLabel.Position = UDim2.new(0, 0, 0, 0)
 nameLabel.BackgroundTransparency = 1
 nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 nameLabel.TextScaled = true
 nameLabel.Font = Enum.Font.GothamBold
-nameLabel.Text = "👤 Tên :" .. hideName(player.Name) .. ""
+nameLabel.Text = "👤 Tên :" .. hideName(lp.Name) .. ""
 
 -- Khung hiển thị đơn
 local jobFrame = Instance.new("Frame")
 jobFrame.Parent = mainFrame
-jobFrame.Size = UDim2.new(1, 0, 0.6, 0)
-jobFrame.Position = UDim2.new(0, 0, 0.4, 0)
+jobFrame.Size = UDim2.new(1, 0, 0.5, 0)
+jobFrame.Position = UDim2.new(0, 0, 0.5, 0)
 jobFrame.BackgroundTransparency = 1
 
 -- Hiển thị chữ "Đơn:"
@@ -150,7 +101,7 @@ jobTitle.TextScaled = true
 jobTitle.Font = Enum.Font.GothamBold
 jobTitle.Text = "📌 Đơn :"
 
--- Ô sửa nội dung đơn
+-- Ô sửa nội dung đơn (đồng bộ với file lưu của user)
 local jobBox = Instance.new("TextBox")
 jobBox.Parent = jobFrame
 jobBox.Size = UDim2.new(0.7, 0, 1, 0)
@@ -159,22 +110,19 @@ jobBox.BackgroundTransparency = 1
 jobBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 jobBox.TextScaled = true
 jobBox.Font = Enum.Font.GothamBold
-jobBox.Text = loadJob() -- Tự động tải nội dung đã lưu trước đó
+jobBox.Text = uData.orders or ""
 jobBox.ClearTextOnFocus = false
 jobBox.TextWrapped = true
 
--- Khi nhấn Enter, cập nhật nội dung và lưu vào workspace
+-- Khi nhấn Enter, cập nhật nội dung và lưu vào file như logic gốc
 jobBox.FocusLost:Connect(function(enterPressed)
     if enterPressed and jobBox.Text ~= "" then
-        saveJob(jobBox.Text)
+        uData.orders = jobBox.Text
+        uData.status = "working"
+        uData.savedAt = os.time()
+        saveUser(lp.Name, uData)
+        jobBox.Text = jobBox.Text
     end
 end)
 
--- Kích hoạt tự động execute khi teleport sang map/server khác (nếu executor hỗ trợ)
-setupAutoExecute()
-
--- Kích hoạt tự động rejoin nếu bị kick / rớt mạng / server sập
-setupAutoRejoin()
-
--- Kích hoạt tự động rejoin nếu bị kick / rớt mạng / server sập
-setupAutoRejoin()
+saveUser(lp.Name, uData)
