@@ -81,7 +81,7 @@ nameLabel.BackgroundTransparency = 1
 nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 nameLabel.TextScaled = true
 nameLabel.Font = Enum.Font.GothamBold
-nameLabel.Text = "👤 Tên :" .. hideName(lp.Name) .. ""
+nameLabel.Text = "👤 User :" .. hideName(lp.Name) .. ""
 
 -- Khung hiển thị đơn
 local jobFrame = Instance.new("Frame")
@@ -99,7 +99,7 @@ jobTitle.BackgroundTransparency = 1
 jobTitle.TextColor3 = Color3.fromRGB(255, 223, 88)
 jobTitle.TextScaled = true
 jobTitle.Font = Enum.Font.GothamBold
-jobTitle.Text = "📌 Đơn :"
+jobTitle.Text = "📌 Orders :"
 
 -- Ô sửa nội dung đơn (đồng bộ với file lưu của user)
 local jobBox = Instance.new("TextBox")
@@ -126,3 +126,4 @@ jobBox.FocusLost:Connect(function(enterPressed)
 end)
 
 saveUser(lp.Name, uData)
+
