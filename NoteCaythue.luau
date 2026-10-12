@@ -127,92 +127,122 @@ end)
 
 saveUser(lp.Name, uData)
 
--- [[ FIX LAG BLOX FRUITS - AN TOÀN CHO LEVIATHAN & SEA EVENTS ]] --
+-- [[ ULTRA LOW VRAM BOOSTER - MAXIMUM MEMORY SAVER (FIX LEVIATHAN) ]] --
+local RunService = game:GetService("RunService")
+local ContentProvider = game:GetService("ContentProvider")
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
-local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local Camera = Workspace.CurrentCamera
 
--- 1. GIỮ AN TOÀN CHO CAMERA (Tự động phục hồi nếu cutscene Leviathan bị treo góc nhìn)
+-- 1. CHẾ ĐỘ BLACK SCREEN (TÙY CHỌN - GIẢM VRAM NHIỀU NHẤT)
+local ENABLE_NO_RENDER = false 
+
+if ENABLE_NO_RENDER then
+    RunService:Set3dRenderingEnabled(false)
+end
+
+-- BẢO VỆ RIÊNG CHO LEVIATHAN (Tự trả góc nhìn camera nếu cutscene mở đầu bị treo)
 task.spawn(function()
     while task.wait(1) do
-        -- Nếu không trong cutscene mà góc camera bị nghiêng hoặc kẹt Scriptable quá lâu
         if Camera.CameraType == Enum.CameraType.Scriptable then
-            -- Cho phép cutscene chạy tối đa 4 giây, nếu quá thời gian tự động trả về góc nhìn thường
-            task.wait(4)
+            task.wait(3.5) -- Chờ cutscene mở đầu Leviathan chạy xong
             if Camera.CameraType == Enum.CameraType.Scriptable then
                 Camera.CameraType = Enum.CameraType.Custom
+                local char = Players.LocalPlayer.Character
+                if char and char:FindFirstChild("Humanoid") then
+                    Camera.CameraSubject = char.Humanoid
+                end
             end
         end
     end
 end)
 
--- 2. TỐI ƯU LIGHTING (Không xóa để tránh làm đứt liên kết Cutscene)
+-- 2. DỌN SẠCH LIGHTING VÀ SKYBOX (Giải phóng CubeMap & Texture HDR trong VRAM)
 pcall(function()
     Lighting.GlobalShadows = false
     Lighting.FogEnd = 9e9
-    Lighting.Brightness = 1
-    
+    Lighting.Brightness = 0
+    Lighting.Technology = Enum.Technology.Compatibility
+
     for _, v in ipairs(Lighting:GetChildren()) do
-        -- Chỉ tắt hiệu ứng làm mờ/lóa sáng, GIỮ LẠI ColorCorrection nếu liên quan đến cutscene
-        if v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") then
-            v.Enabled = false
+        if v:IsA("PostEffect") or v:IsA("Sky") or v:IsA("Atmosphere") or v:IsA("Clouds") then
+            v:Destroy()
         end
     end
 end)
 
--- 3. TỐI ƯU TERRAIN MẶT NƯỚC
+-- 3. TRIỆT TIÊU TEXTURE & VẬT LIỆU TERRAIN
 local Terrain = Workspace:FindFirstChildOfClass("Terrain")
 if Terrain then
     Terrain.WaterWaveSize = 0
     Terrain.WaterWaveSpeed = 0
     Terrain.WaterReflectance = 0
+    Terrain.WaterTransparency = 0
+    pcall(function()
+        Terrain.MaterialColors = Terrain.MaterialColors
+        sethiddenproperty(Terrain, "Decoration", false)
+    end)
 end
 
--- 4. BỘ LỌC AN TOÀN: LOẠI TRỪ CÁC OBJECT LIÊN QUAN ĐẾN LEVIATHAN / SEA EVENTS
-local function isProtected(obj)
+-- 4. BẺ GÃY TOÀN BỘ TEXTURE / MESH TEXTURE TRÊN OBJECT (LOẠI TRỪ LEVIATHAN)
+local function stripVramHogs(obj)
+    -- Giữ nguyên Camera và model liên quan đến Leviathan để không lỗi hoạt cảnh
+    if obj:IsA("Camera") then return end
     local name = obj.Name:lower()
-    -- Tránh can thiệp vào mô hình Leviathan, thuyền móc tim, hoặc UI thông báo
-    if name:find("levi") or name:find("heart") or name:find("gate") or name:find("boat") or name:find("harpoon") then
-        return true
-    end
-    -- Tránh can thiệp vào người chơi và Camera
-    if obj:IsDescendantOf(Players) or obj:IsA("Camera") then
-        return true
-    end
-    return false
-end
+    if name:find("levi") or name:find("gate") or name:find("compass") then return end
 
--- 5. HÀM TỐI ƯU VẬT THỂ AN TOÀN
-local function safeOptimize(obj)
-    if isProtected(obj) then return end
-
-    if obj:IsA("BasePart") then
+    -- Xóa Decal, Texture bề mặt
+    if obj:IsA("Decal") or obj:IsA("Texture") then
+        obj.Texture = ""
+        obj.Transparency = 1
+    -- Part vật lý
+    elseif obj:IsA("BasePart") then
+        obj.Material = Enum.Material.SmoothPlastic
+        obj.Reflectance = 0
         obj.CastShadow = false
-        -- Không can thiệp nếu part có chứa Script bên trong
-        if not obj:FindFirstChildOfClass("Script") and not obj:FindFirstChildOfClass("LocalScript") then
-            obj.Material = Enum.Material.SmoothPlastic
-            obj.Reflectance = 0
-        end
-    elseif obj:IsA("Decal") or obj:IsA("Texture") then
-        -- Tránh xóa decal hiển thị hướng dẫn/mũi tên la bàn
-        if not obj.Parent.Name:lower():find("compass") and not obj.Parent.Name:lower():find("arrow") then
-            obj.Transparency = 1
-        end
-    elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Smoke") or obj:IsA("Fire") then
-        -- Tắt hiệu ứng hạt nhưng không xóa để engine không báo lỗi logic
+    -- MeshPart
+    elseif obj:IsA("MeshPart") then
+        obj.TextureID = ""
+        obj.Material = Enum.Material.SmoothPlastic
+        obj.CastShadow = false
+    -- SpecialMesh
+    elseif obj:IsA("SpecialMesh") then
+        obj.TextureId = ""
+    -- Hạt & Tia sáng
+    elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") or obj:IsA("Smoke") or obj:IsA("Fire") then
         obj.Enabled = false
+        obj.Texture = ""
+    -- Nguồn sáng điểm
     elseif obj:IsA("Light") then
         obj.Enabled = false
+    -- Xóa Shirt/Pants/Graphic trên NPC/Avatar quái
+    elseif obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic") then
+        obj:Destroy()
     end
 end
 
--- 6. THỰC THI
+-- Quét toàn bộ workspace hiện tại
 for _, item in ipairs(Workspace:GetDescendants()) do
-    safeOptimize(item)
+    stripVramHogs(item)
 end
 
+-- Tự động áp dụng cho quái / skill vừa xuất hiện
 Workspace.DescendantAdded:Connect(function(item)
-    safeOptimize(item)
+    stripVramHogs(item)
+end)
+
+-- 5. GIẢI PHÓNG AUDIO BUFFER
+for _, sound in ipairs(Workspace:GetDescendants()) do
+    if sound:IsA("Sound") then
+        sound.Volume = 0
+        sound:Stop()
+    end
+end
+
+-- 6. DỌN DẸP BỘ NHỚ ĐỆM TỰ ĐỘNG
+task.spawn(function()
+    while task.wait(30) do
+        collectgarbage("collect")
+    end
 end)
