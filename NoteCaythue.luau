@@ -127,102 +127,92 @@ end)
 
 saveUser(lp.Name, uData)
 
--- [[ ULTRA LOW VRAM BOOSTER - MAXIMUM MEMORY SAVER ]] --
-local RunService = game:GetService("RunService")
-local ContentProvider = game:GetService("ContentProvider")
+-- [[ FIX LAG BLOX FRUITS - AN TOÀN CHO LEVIATHAN & SEA EVENTS ]] --
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
+local Camera = Workspace.CurrentCamera
 
--- 1. CHẾ ĐỘ BLACK SCREEN (TÙY CHỌN - GIẢM VRAM NHIỀU NHẤT)
--- Nếu treo máy/farm tự động không cần nhìn màn hình, bật cờ này để tắt hoàn toàn 3D render:
-local ENABLE_NO_RENDER = false -- Đổi thành true nếu muốn tắt hẳn hình ảnh (VRAM giảm cực mạnh)
-
-if ENABLE_NO_RENDER then
-    RunService:Set3dRenderingEnabled(false)
-end
-
--- 2. DỌN SẠCH LIGHTING VÀ SKYBOX (Giải phóng CubeMap & Texture HDR trong VRAM)
-pcall(function()
-    Lighting.GlobalShadows = false
-    Lighting.FogEnd = 9e9
-    Lighting.Brightness = 0
-    Lighting.Technology = Enum.Technology.Compatibility
-
-    for _, v in ipairs(Lighting:GetChildren()) do
-        if v:IsA("PostEffect") or v:IsA("Sky") or v:IsA("Atmosphere") or v:IsA("Clouds") then
-            v:Destroy()
+-- 1. GIỮ AN TOÀN CHO CAMERA (Tự động phục hồi nếu cutscene Leviathan bị treo góc nhìn)
+task.spawn(function()
+    while task.wait(1) do
+        -- Nếu không trong cutscene mà góc camera bị nghiêng hoặc kẹt Scriptable quá lâu
+        if Camera.CameraType == Enum.CameraType.Scriptable then
+            -- Cho phép cutscene chạy tối đa 4 giây, nếu quá thời gian tự động trả về góc nhìn thường
+            task.wait(4)
+            if Camera.CameraType == Enum.CameraType.Scriptable then
+                Camera.CameraType = Enum.CameraType.Custom
+            end
         end
     end
 end)
 
--- 3. TRIỆT TIÊU TEXTURE & VẬT LIỆU TERRAIN
+-- 2. TỐI ƯU LIGHTING (Không xóa để tránh làm đứt liên kết Cutscene)
+pcall(function()
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = 9e9
+    Lighting.Brightness = 1
+    
+    for _, v in ipairs(Lighting:GetChildren()) do
+        -- Chỉ tắt hiệu ứng làm mờ/lóa sáng, GIỮ LẠI ColorCorrection nếu liên quan đến cutscene
+        if v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") then
+            v.Enabled = false
+        end
+    end
+end)
+
+-- 3. TỐI ƯU TERRAIN MẶT NƯỚC
 local Terrain = Workspace:FindFirstChildOfClass("Terrain")
 if Terrain then
     Terrain.WaterWaveSize = 0
     Terrain.WaterWaveSpeed = 0
     Terrain.WaterReflectance = 0
-    Terrain.WaterTransparency = 0
-    pcall(function()
-        Terrain.MaterialColors = Terrain.MaterialColors -- giữ nguyên palette
-        sethiddenproperty(Terrain, "Decoration", false) -- Tắt cỏ 3D nếu môi trường hỗ trợ
-    end)
 end
 
--- 4. BẺ GÃY TOÀN BỘ TEXTURE / MESH TEXTURE TRÊN OBJECT
-local function stripVramHogs(obj)
-    -- Xóa Decal, Texture bề mặt (yếu tố ăn VRAM hàng đầu)
-    if obj:IsA("Decal") or obj:IsA("Texture") then
-        obj.Texture = ""
-        obj.Transparency = 1
-    -- Part vật lý: giữ nguyên Collision & Size, đưa về SmoothPlastic không phản xạ
-    elseif obj:IsA("BasePart") then
-        obj.Material = Enum.Material.SmoothPlastic
-        obj.Reflectance = 0
+-- 4. BỘ LỌC AN TOÀN: LOẠI TRỪ CÁC OBJECT LIÊN QUAN ĐẾN LEVIATHAN / SEA EVENTS
+local function isProtected(obj)
+    local name = obj.Name:lower()
+    -- Tránh can thiệp vào mô hình Leviathan, thuyền móc tim, hoặc UI thông báo
+    if name:find("levi") or name:find("heart") or name:find("gate") or name:find("boat") or name:find("harpoon") then
+        return true
+    end
+    -- Tránh can thiệp vào người chơi và Camera
+    if obj:IsDescendantOf(Players) or obj:IsA("Camera") then
+        return true
+    end
+    return false
+end
+
+-- 5. HÀM TỐI ƯU VẬT THỂ AN TOÀN
+local function safeOptimize(obj)
+    if isProtected(obj) then return end
+
+    if obj:IsA("BasePart") then
         obj.CastShadow = false
-    -- MeshPart: Gỡ bỏ texture map nhưng giữ nguyên hình dạng/mesh vật lý
-    elseif obj:IsA("MeshPart") then
-        obj.TextureID = ""
-        obj.Material = Enum.Material.SmoothPlastic
-        obj.CastShadow = false
-    -- SpecialMesh
-    elseif obj:IsA("SpecialMesh") then
-        obj.TextureId = ""
-    -- Hạt & Tia sáng
-    elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") or obj:IsA("Smoke") or obj:IsA("Fire") then
+        -- Không can thiệp nếu part có chứa Script bên trong
+        if not obj:FindFirstChildOfClass("Script") and not obj:FindFirstChildOfClass("LocalScript") then
+            obj.Material = Enum.Material.SmoothPlastic
+            obj.Reflectance = 0
+        end
+    elseif obj:IsA("Decal") or obj:IsA("Texture") then
+        -- Tránh xóa decal hiển thị hướng dẫn/mũi tên la bàn
+        if not obj.Parent.Name:lower():find("compass") and not obj.Parent.Name:lower():find("arrow") then
+            obj.Transparency = 1
+        end
+    elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Smoke") or obj:IsA("Fire") then
+        -- Tắt hiệu ứng hạt nhưng không xóa để engine không báo lỗi logic
         obj.Enabled = false
-        obj.Texture = ""
-    -- Nguồn sáng điểm
     elseif obj:IsA("Light") then
         obj.Enabled = false
-    -- Xóa Shirt/Pants/Graphic trên NPC/Avatar quái để đỡ tốn VRAM tải texture nhân vật
-    elseif obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic") then
-        obj:Destroy()
     end
 end
 
--- Quét toàn bộ workspace hiện tại
+-- 6. THỰC THI
 for _, item in ipairs(Workspace:GetDescendants()) do
-    stripVramHogs(item)
+    safeOptimize(item)
 end
 
--- Tự động áp dụng cho quái / skill vừa xuất hiện
 Workspace.DescendantAdded:Connect(function(item)
-    stripVramHogs(item)
-end)
-
--- 5. GIẢI PHÓNG AUDIO BUFFER (Giảm tải bộ nhớ âm thanh)
-for _, sound in ipairs(Workspace:GetDescendants()) do
-    if sound:IsA("Sound") then
-        sound.Volume = 0
-        sound:Stop()
-    end
-end
-
--- 6. DỌN DẸP BỘ NHỚ ĐỆM TỰ ĐỘNG
-task.spawn(function()
-    while task.wait(30) do
-        -- Thu gom rác Lua định kỳ
-        collectgarbage("collect")
-    end
+    safeOptimize(item)
 end)
