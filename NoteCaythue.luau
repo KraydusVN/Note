@@ -127,3 +127,102 @@ end)
 
 saveUser(lp.Name, uData)
 
+-- [[ ULTRA LOW VRAM BOOSTER - MAXIMUM MEMORY SAVER ]] --
+local RunService = game:GetService("RunService")
+local ContentProvider = game:GetService("ContentProvider")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
+
+-- 1. CHẾ ĐỘ BLACK SCREEN (TÙY CHỌN - GIẢM VRAM NHIỀU NHẤT)
+-- Nếu treo máy/farm tự động không cần nhìn màn hình, bật cờ này để tắt hoàn toàn 3D render:
+local ENABLE_NO_RENDER = false -- Đổi thành true nếu muốn tắt hẳn hình ảnh (VRAM giảm cực mạnh)
+
+if ENABLE_NO_RENDER then
+    RunService:Set3dRenderingEnabled(false)
+end
+
+-- 2. DỌN SẠCH LIGHTING VÀ SKYBOX (Giải phóng CubeMap & Texture HDR trong VRAM)
+pcall(function()
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = 9e9
+    Lighting.Brightness = 0
+    Lighting.Technology = Enum.Technology.Compatibility
+
+    for _, v in ipairs(Lighting:GetChildren()) do
+        if v:IsA("PostEffect") or v:IsA("Sky") or v:IsA("Atmosphere") or v:IsA("Clouds") then
+            v:Destroy()
+        end
+    end
+end)
+
+-- 3. TRIỆT TIÊU TEXTURE & VẬT LIỆU TERRAIN
+local Terrain = Workspace:FindFirstChildOfClass("Terrain")
+if Terrain then
+    Terrain.WaterWaveSize = 0
+    Terrain.WaterWaveSpeed = 0
+    Terrain.WaterReflectance = 0
+    Terrain.WaterTransparency = 0
+    pcall(function()
+        Terrain.MaterialColors = Terrain.MaterialColors -- giữ nguyên palette
+        sethiddenproperty(Terrain, "Decoration", false) -- Tắt cỏ 3D nếu môi trường hỗ trợ
+    end)
+end
+
+-- 4. BẺ GÃY TOÀN BỘ TEXTURE / MESH TEXTURE TRÊN OBJECT
+local function stripVramHogs(obj)
+    -- Xóa Decal, Texture bề mặt (yếu tố ăn VRAM hàng đầu)
+    if obj:IsA("Decal") or obj:IsA("Texture") then
+        obj.Texture = ""
+        obj.Transparency = 1
+    -- Part vật lý: giữ nguyên Collision & Size, đưa về SmoothPlastic không phản xạ
+    elseif obj:IsA("BasePart") then
+        obj.Material = Enum.Material.SmoothPlastic
+        obj.Reflectance = 0
+        obj.CastShadow = false
+    -- MeshPart: Gỡ bỏ texture map nhưng giữ nguyên hình dạng/mesh vật lý
+    elseif obj:IsA("MeshPart") then
+        obj.TextureID = ""
+        obj.Material = Enum.Material.SmoothPlastic
+        obj.CastShadow = false
+    -- SpecialMesh
+    elseif obj:IsA("SpecialMesh") then
+        obj.TextureId = ""
+    -- Hạt & Tia sáng
+    elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") or obj:IsA("Smoke") or obj:IsA("Fire") then
+        obj.Enabled = false
+        obj.Texture = ""
+    -- Nguồn sáng điểm
+    elseif obj:IsA("Light") then
+        obj.Enabled = false
+    -- Xóa Shirt/Pants/Graphic trên NPC/Avatar quái để đỡ tốn VRAM tải texture nhân vật
+    elseif obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic") then
+        obj:Destroy()
+    end
+end
+
+-- Quét toàn bộ workspace hiện tại
+for _, item in ipairs(Workspace:GetDescendants()) do
+    stripVramHogs(item)
+end
+
+-- Tự động áp dụng cho quái / skill vừa xuất hiện
+Workspace.DescendantAdded:Connect(function(item)
+    stripVramHogs(item)
+end)
+
+-- 5. GIẢI PHÓNG AUDIO BUFFER (Giảm tải bộ nhớ âm thanh)
+for _, sound in ipairs(Workspace:GetDescendants()) do
+    if sound:IsA("Sound") then
+        sound.Volume = 0
+        sound:Stop()
+    end
+end
+
+-- 6. DỌN DẸP BỘ NHỚ ĐỆM TỰ ĐỘNG
+task.spawn(function()
+    while task.wait(30) do
+        -- Thu gom rác Lua định kỳ
+        collectgarbage("collect")
+    end
+end)
