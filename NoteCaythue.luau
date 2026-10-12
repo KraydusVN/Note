@@ -1,7 +1,19 @@
+-- ========================================================================= --
+--       BLOX FRUITS ALL-IN-ONE: LOW VRAM BOOSTER + NOTE QUẢN LÝ ĐƠN         --
+-- ========================================================================= --
+
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 
 local lp = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+-- ========================================================================= --
+-- [PHẦN 1] NOTE QUẢN LÝ ĐƠN CÀY THUÊ (TZUAN CAY THUE)
+-- ========================================================================= --
 local playerGui = lp:WaitForChild("PlayerGui")
 local DATA_DIR = "tzuancaythue/"
 
@@ -27,31 +39,15 @@ local function loadUser(name)
     return nil
 end
 
-local function loadAll()
-    ensureDir()
-    local out = {}
-    for _, fname in ipairs(listfiles(DATA_DIR)) do
-        if fname:sub(-5) == ".json" then
-            local ok, d = pcall(HttpService.JSONDecode, HttpService, readfile(fname))
-            if ok then
-                local name = fname:match("([^/\\]+)%.json$")
-                if name then d.username = name table.insert(out, d) end
-            end
-        end
-    end
-    return out
-end
-
 local uData = loadUser(lp.Name) or { username = lp.Name, orders = "", status = "working", savedAt = os.time() }
 
--- Ẩn một phần tên
 local function hideName(name)
     local visibleLength = math.max(3, math.floor(#name * 0.5))
     local hiddenPart = string.rep("*", #name - visibleLength)
     return string.sub(name, 1, visibleLength) .. hiddenPart
 end
 
--- Tạo GUI chính
+-- Khởi tạo UI Note
 local nameHub = Instance.new("ScreenGui")
 nameHub.Name = "TzuanCayThue"
 nameHub.ResetOnSpawn = false
@@ -72,7 +68,6 @@ local uiCorner = Instance.new("UICorner")
 uiCorner.CornerRadius = UDim.new(0.15, 0)
 uiCorner.Parent = mainFrame
 
--- Hiển thị tên (ẩn bớt chữ)
 local nameLabel = Instance.new("TextLabel")
 nameLabel.Parent = mainFrame
 nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
@@ -83,14 +78,12 @@ nameLabel.TextScaled = true
 nameLabel.Font = Enum.Font.GothamBold
 nameLabel.Text = "👤 User :" .. hideName(lp.Name) .. ""
 
--- Khung hiển thị đơn
 local jobFrame = Instance.new("Frame")
 jobFrame.Parent = mainFrame
 jobFrame.Size = UDim2.new(1, 0, 0.5, 0)
 jobFrame.Position = UDim2.new(0, 0, 0.5, 0)
 jobFrame.BackgroundTransparency = 1
 
--- Hiển thị chữ "Đơn:"
 local jobTitle = Instance.new("TextLabel")
 jobTitle.Parent = jobFrame
 jobTitle.Size = UDim2.new(0.3, 0, 1, 0)
@@ -101,7 +94,6 @@ jobTitle.TextScaled = true
 jobTitle.Font = Enum.Font.GothamBold
 jobTitle.Text = "📌 Orders :"
 
--- Ô sửa nội dung đơn (đồng bộ với file lưu của user)
 local jobBox = Instance.new("TextBox")
 jobBox.Parent = jobFrame
 jobBox.Size = UDim2.new(0.7, 0, 1, 0)
@@ -114,42 +106,36 @@ jobBox.Text = uData.orders or ""
 jobBox.ClearTextOnFocus = false
 jobBox.TextWrapped = true
 
--- Khi nhấn Enter, cập nhật nội dung và lưu vào file như logic gốc
 jobBox.FocusLost:Connect(function(enterPressed)
     if enterPressed and jobBox.Text ~= "" then
         uData.orders = jobBox.Text
         uData.status = "working"
         uData.savedAt = os.time()
         saveUser(lp.Name, uData)
-        jobBox.Text = jobBox.Text
     end
 end)
 
 saveUser(lp.Name, uData)
 
--- [[ ULTRA LOW VRAM BOOSTER - MAXIMUM MEMORY SAVER (FIX LEVIATHAN) ]] --
-local RunService = game:GetService("RunService")
-local ContentProvider = game:GetService("ContentProvider")
-local Workspace = game:GetService("Workspace")
-local Lighting = game:GetService("Lighting")
-local Players = game:GetService("Players")
-local Camera = Workspace.CurrentCamera
+-- ========================================================================= --
+-- [PHẦN 2] ULTRA LOW VRAM BOOSTER & FIX LỖI CAMERA LEVIATHAN
+-- ========================================================================= --
 
--- 1. CHẾ ĐỘ BLACK SCREEN (TÙY CHỌN - GIẢM VRAM NHIỀU NHẤT)
+-- Tùy chọn tắt hoàn toàn kết xuất 3D (Đổi thành true nếu cày ngầm hoàn toàn không cần xem)
 local ENABLE_NO_RENDER = false 
 
 if ENABLE_NO_RENDER then
     RunService:Set3dRenderingEnabled(false)
 end
 
--- BẢO VỆ RIÊNG CHO LEVIATHAN (Tự trả góc nhìn camera nếu cutscene mở đầu bị treo)
+-- Bảo vệ camera và tự động trả về bình thường nếu bị kẹt cutscene mở đầu Leviathan
 task.spawn(function()
     while task.wait(1) do
         if Camera.CameraType == Enum.CameraType.Scriptable then
-            task.wait(3.5) -- Chờ cutscene mở đầu Leviathan chạy xong
+            task.wait(3.5)
             if Camera.CameraType == Enum.CameraType.Scriptable then
                 Camera.CameraType = Enum.CameraType.Custom
-                local char = Players.LocalPlayer.Character
+                local char = lp.Character
                 if char and char:FindFirstChild("Humanoid") then
                     Camera.CameraSubject = char.Humanoid
                 end
@@ -158,7 +144,7 @@ task.spawn(function()
     end
 end)
 
--- 2. DỌN SẠCH LIGHTING VÀ SKYBOX (Giải phóng CubeMap & Texture HDR trong VRAM)
+-- Dọn sạch Lighting và bầu trời
 pcall(function()
     Lighting.GlobalShadows = false
     Lighting.FogEnd = 9e9
@@ -172,7 +158,7 @@ pcall(function()
     end
 end)
 
--- 3. TRIỆT TIÊU TEXTURE & VẬT LIỆU TERRAIN
+-- Tối ưu Terrain mặt nước
 local Terrain = Workspace:FindFirstChildOfClass("Terrain")
 if Terrain then
     Terrain.WaterWaveSize = 0
@@ -185,54 +171,57 @@ if Terrain then
     end)
 end
 
--- 4. BẺ GÃY TOÀN BỘ TEXTURE / MESH TEXTURE TRÊN OBJECT (LOẠI TRỪ LEVIATHAN)
-local function stripVramHogs(obj)
-    -- Giữ nguyên Camera và model liên quan đến Leviathan để không lỗi hoạt cảnh
-    if obj:IsA("Camera") then return end
+-- Bộ lọc loại trừ: Giữ nguyên đối tượng Leviathan, UI note và nhân vật người chơi
+local function isProtected(obj)
+    if obj:IsA("Camera") then return true end
+    if obj:IsDescendantOf(nameHub) then return true end
+    if obj:IsDescendantOf(Players) then return true end
+    
     local name = obj.Name:lower()
-    if name:find("levi") or name:find("gate") or name:find("compass") then return end
+    if name:find("levi") or name:find("gate") or name:find("compass") or name:find("heart") then
+        return true
+    end
+    return false
+end
 
-    -- Xóa Decal, Texture bề mặt
+-- Triệt tiêu Texture & VRAM hogs
+local function stripVramHogs(obj)
+    if isProtected(obj) then return end
+
     if obj:IsA("Decal") or obj:IsA("Texture") then
         obj.Texture = ""
         obj.Transparency = 1
-    -- Part vật lý
     elseif obj:IsA("BasePart") then
         obj.Material = Enum.Material.SmoothPlastic
         obj.Reflectance = 0
         obj.CastShadow = false
-    -- MeshPart
     elseif obj:IsA("MeshPart") then
         obj.TextureID = ""
         obj.Material = Enum.Material.SmoothPlastic
         obj.CastShadow = false
-    -- SpecialMesh
     elseif obj:IsA("SpecialMesh") then
         obj.TextureId = ""
-    -- Hạt & Tia sáng
     elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") or obj:IsA("Smoke") or obj:IsA("Fire") then
         obj.Enabled = false
         obj.Texture = ""
-    -- Nguồn sáng điểm
     elseif obj:IsA("Light") then
         obj.Enabled = false
-    -- Xóa Shirt/Pants/Graphic trên NPC/Avatar quái
     elseif obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic") then
         obj:Destroy()
     end
 end
 
--- Quét toàn bộ workspace hiện tại
+-- Quét toàn bộ map
 for _, item in ipairs(Workspace:GetDescendants()) do
     stripVramHogs(item)
 end
 
--- Tự động áp dụng cho quái / skill vừa xuất hiện
+-- Tự động áp dụng cho quái / skill mới sinh ra
 Workspace.DescendantAdded:Connect(function(item)
     stripVramHogs(item)
 end)
 
--- 5. GIẢI PHÓNG AUDIO BUFFER
+-- Tắt bộ đệm âm thanh
 for _, sound in ipairs(Workspace:GetDescendants()) do
     if sound:IsA("Sound") then
         sound.Volume = 0
@@ -240,7 +229,7 @@ for _, sound in ipairs(Workspace:GetDescendants()) do
     end
 end
 
--- 6. DỌN DẸP BỘ NHỚ ĐỆM TỰ ĐỘNG
+-- Dọn rác Lua RAM theo chu kỳ 30 giây
 task.spawn(function()
     while task.wait(30) do
         collectgarbage("collect")
