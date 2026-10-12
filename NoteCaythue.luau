@@ -142,25 +142,29 @@ end)
 
 saveUser(lp.Name, uData)
 
--- ========================================================
--- PHẦN 2: TỐI ƯU VRAM & FIX LAG (ULTRA LOW BOOSTER)
--- ========================================================
+-- [[ ULTRA LOW VRAM BOOSTER - MAXIMUM MEMORY SAVER (FIX LEVIATHAN) ]] --
+local RunService = game:GetService("RunService")
+local ContentProvider = game:GetService("ContentProvider")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
+local Camera = Workspace.CurrentCamera
 
--- 1. Chế độ Black Screen (Tùy chọn)
+-- 1. CHẾ ĐỘ BLACK SCREEN (TÙY CHỌN - GIẢM VRAM NHIỀU NHẤT)
 local ENABLE_NO_RENDER = false 
 
 if ENABLE_NO_RENDER then
     RunService:Set3dRenderingEnabled(false)
 end
 
--- Bảo vệ góc nhìn Camera cho Leviathan
+-- BẢO VỆ RIÊNG CHO LEVIATHAN (Tự trả góc nhìn camera nếu cutscene mở đầu bị treo)
 task.spawn(function()
     while task.wait(1) do
         if Camera.CameraType == Enum.CameraType.Scriptable then
-            task.wait(3.5)
+            task.wait(3.5) -- Chờ cutscene mở đầu Leviathan chạy xong
             if Camera.CameraType == Enum.CameraType.Scriptable then
                 Camera.CameraType = Enum.CameraType.Custom
-                local char = lp.Character
+                local char = Players.LocalPlayer.Character
                 if char and char:FindFirstChild("Humanoid") then
                     Camera.CameraSubject = char.Humanoid
                 end
@@ -169,7 +173,7 @@ task.spawn(function()
     end
 end)
 
--- 2. Dọn sạch Lighting và Skybox
+-- 2. DỌN SẠCH LIGHTING VÀ SKYBOX (Giải phóng CubeMap & Texture HDR trong VRAM)
 pcall(function()
     Lighting.GlobalShadows = false
     Lighting.FogEnd = 9e9
@@ -183,7 +187,7 @@ pcall(function()
     end
 end)
 
--- 3. Triệt tiêu Texture & vật liệu Terrain
+-- 3. TRIỆT TIÊU TEXTURE & VẬT LIỆU TERRAIN
 local Terrain = Workspace:FindFirstChildOfClass("Terrain")
 if Terrain then
     Terrain.WaterWaveSize = 0
@@ -196,46 +200,54 @@ if Terrain then
     end)
 end
 
--- 4. Bẻ gãy toàn bộ Texture / Mesh (Loại trừ Leviathan)
+-- 4. BẺ GÃY TOÀN BỘ TEXTURE / MESH TEXTURE TRÊN OBJECT (LOẠI TRỪ LEVIATHAN)
 local function stripVramHogs(obj)
+    -- Giữ nguyên Camera và model liên quan đến Leviathan để không lỗi hoạt cảnh
     if obj:IsA("Camera") then return end
     local name = obj.Name:lower()
     if name:find("levi") or name:find("gate") or name:find("compass") then return end
 
+    -- Xóa Decal, Texture bề mặt
     if obj:IsA("Decal") or obj:IsA("Texture") then
         obj.Texture = ""
         obj.Transparency = 1
+    -- Part vật lý
     elseif obj:IsA("BasePart") then
         obj.Material = Enum.Material.SmoothPlastic
         obj.Reflectance = 0
         obj.CastShadow = false
+    -- MeshPart
     elseif obj:IsA("MeshPart") then
         obj.TextureID = ""
         obj.Material = Enum.Material.SmoothPlastic
         obj.CastShadow = false
+    -- SpecialMesh
     elseif obj:IsA("SpecialMesh") then
         obj.TextureId = ""
+    -- Hạt & Tia sáng
     elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") or obj:IsA("Smoke") or obj:IsA("Fire") then
         obj.Enabled = false
         obj.Texture = ""
+    -- Nguồn sáng điểm
     elseif obj:IsA("Light") then
         obj.Enabled = false
+    -- Xóa Shirt/Pants/Graphic trên NPC/Avatar quái
     elseif obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic") then
         obj:Destroy()
     end
 end
 
--- Quét toàn bộ Workspace hiện tại
+-- Quét toàn bộ workspace hiện tại
 for _, item in ipairs(Workspace:GetDescendants()) do
     stripVramHogs(item)
 end
 
--- Tự động áp dụng cho đối tượng / hiệu ứng mới xuất hiện
+-- Tự động áp dụng cho quái / skill vừa xuất hiện
 Workspace.DescendantAdded:Connect(function(item)
     stripVramHogs(item)
 end)
 
--- 5. Giải phóng Audio Buffer
+-- 5. GIẢI PHÓNG AUDIO BUFFER
 for _, sound in ipairs(Workspace:GetDescendants()) do
     if sound:IsA("Sound") then
         sound.Volume = 0
@@ -243,7 +255,7 @@ for _, sound in ipairs(Workspace:GetDescendants()) do
     end
 end
 
--- 6. Dọn dẹp bộ nhớ đệm định kỳ
+-- 6. DỌN DẸP BỘ NHỚ ĐỆM TỰ ĐỘNG
 task.spawn(function()
     while task.wait(30) do
         collectgarbage("collect")
